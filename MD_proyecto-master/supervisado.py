@@ -1,65 +1,92 @@
-import pandas as pd
-import ast
+"""
+supervisado.py
+
+Entrenamiento y evaluación de un modelo SUPERVISADO
+a partir de user_embeddings_PCA.csv, usando la función
+de preproceso cargar_datos_supervisado_desde_pca().
+
+Este script NO toca tu flujo de K-Means. Es un módulo aparte.
+"""
+
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+)
 
-BASE = Path(__file__).resolve().parent
-
-PATH_LABELS = BASE / "MD_proyecto-master" / "500_Reddit_users_posts_labels.csv"
-PATH_EMBS   = BASE / "MD_proyecto-master" / "user_embeddings_PCA.csv"
+from preproceso import cargar_datos_supervisado_desde_pca
 
 
-def cargar_datos():
-    # === 1. Cargar ambos CSV ===
-    labels = pd.read_csv(PATH_LABELS)
-    embs   = pd.read_csv(PATH_EMBS)
+def train_test_split_supervisado(X, y, test_size: float = 0.2, random_state: int = 42):
+    """
+    Hace la división train/test estratificada para mantener
+    las proporciones de clases.
+    """
+    return train_test_split(
+        X,
+        y,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=y,
+    )
 
-    # --- Normalizar columna User para que coincida ---
-    labels['User'] = labels['User'].str.replace("user-", "").astype(int)
 
-    # --- Convertir embedding (string) → lista ---
-    embs['embedding'] = embs['embedding'].apply(ast.literal_eval)
+def entrenar_modelo_supervisado(X_train, y_train):
+    """
+    Entrena un modelo supervisado sencillo.
+    Usamos RandomForestClassifier como baseline robusto.
+    """
+    clf = RandomForestClassifier(
+        n_estimators=300,
+        max_depth=None,
+        random_state=42,
+        n_jobs=-1,
+    )
+    clf.fit(X_train, y_train)
+    return clf
 
-    # --- Unir por User ---
-    df = labels.merge(embs[['User', 'embedding']], on='User', how='inner')
 
-    print("Dataset combinado:", df.shape)
+def evaluar_modelo(clf, X_train, y_train, X_test, y_test):
+    """
+    Imprime métricas básicas en train y test.
+    Más adelante podemos conectar esto con evaluacion.py.
+    """
+    # Predicciones
+    y_train_pred = clf.predict(X_train)
+    y_test_pred = clf.predict(X_test)
 
-    # --- Expandir lista de embedding a columnas numéricas ---
-    X = pd.DataFrame(df['embedding'].tolist())
+    print("\n================= MÉTRICAS EN TRAIN =================")
+    print(f"Accuracy (train): {accuracy_score(y_train, y_train_pred):.4f}")
 
-    # --- Target ---
-    y = df['Label']
+    print("\n================== MÉTRICAS EN TEST =================")
+    print(f"Accuracy (test): {accuracy_score(y_test, y_test_pred):.4f}")
+    print("\nClassification report (TEST):")
+    print(classification_report(y_test, y_test_pred))
 
-    return X, y
+    print("\nMatriz de confusión (TEST):")
+    print(confusion_matrix(y_test, y_test_pred))
 
 
 def main():
-    X, y = cargar_datos()
+    # 1) Cargar datos ya preprocesados desde PCA
+    X, y, df = cargar_datos_supervisado_desde_pca("user_embeddings_PCA.csv")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    # 2) Split train/test
+    X_train, X_test, y_train, y_test = train_test_split_supervisado(X, y)
 
-    clf = RandomForestClassifier(
-        n_estimators=300,
-        random_state=42,
-        n_jobs=-1
-    )
+    # 3) Entrenar modelo supervisado
+    clf = entrenar_modelo_supervisado(X_train, y_train)
 
-    clf.fit(X_train, y_train)
-
-    preds = clf.predict(X_test)
-
-    print("\nAccuracy:", accuracy_score(y_test, preds))
-    print("\nClassification report:")
-    print(classification_report(y_test, preds))
-    print("\nConfusion matrix:")
-    print(confusion_matrix(y_test, preds))
+    # 4) Evaluar modelo
+    evaluar_modelo(clf, X_train, y_train, X_test, y_test)
 
 
 if __name__ == "__main__":
     main()
+
