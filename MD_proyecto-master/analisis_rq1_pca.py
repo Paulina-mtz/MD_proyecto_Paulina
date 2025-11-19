@@ -14,7 +14,10 @@ Este script:
     - Calcula silhouette global y por clase
     - Calcula distancias entre centroides de clase
     - Calcula dispersión intra-clase
-    - (Opcional) genera una proyección t-SNE 2D coloreada por clase
+    - Genera:
+        * Curve tipo scree (varianza por componente PCA)
+        * Heatmap de distancias entre centroides
+        * t-SNE 2D coloreado por clase
 """
 
 from pathlib import Path
@@ -98,7 +101,12 @@ def calcular_geometria_clases(X: pd.DataFrame, y: pd.Series):
     return centroids, intra_dist, dist_df
 
 
-def generar_tsne_2d(X: pd.DataFrame, y: pd.Series, out_png: str = "rq1_tsne_pca_labels.png", max_points: int = 5000):
+def generar_tsne_2d(
+    X: pd.DataFrame,
+    y: pd.Series,
+    out_png: str = "rq1_tsne_pca_labels.png",
+    max_points: int = 5000,
+):
     """
     Genera un t-SNE 2D para visualizar la separabilidad de las clases
     en el espacio PCA. Submuestrea hasta max_points puntos para que sea
@@ -135,13 +143,12 @@ def generar_tsne_2d(X: pd.DataFrame, y: pd.Series, out_png: str = "rq1_tsne_pca_
     colors = [color_map[c] for c in y_sub]
 
     plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(X_2d[:, 0], X_2d[:, 1], c=colors, s=5, alpha=0.7)
+    plt.scatter(X_2d[:, 0], X_2d[:, 1], c=colors, s=5, alpha=0.7)
     plt.title("t-SNE de embeddings PCA coloreado por clase (RQ1)")
     plt.xlabel("t-SNE dim 1")
     plt.ylabel("t-SNE dim 2")
 
     # Leyenda manual
-    # Se toma un punto representativo por clase
     handles = []
     labels = []
     for c in clases:
@@ -155,6 +162,56 @@ def generar_tsne_2d(X: pd.DataFrame, y: pd.Series, out_png: str = "rq1_tsne_pca_
     print(f"[OK] Figura t-SNE guardada en: {out_png}")
 
 
+def generar_scree_plot(X: pd.DataFrame, out_png: str = "rq1_scree_pca.png"):
+    """
+    Genera una gráfica tipo 'scree plot' usando la varianza de cada
+    componente del espacio PCA ya reducido.
+
+    Nota: no es la varianza explicada directa de sklearn.PCA,
+    pero es proporcional a los eigenvalores si los datos están
+    centrados, por lo que es válida para interpretar la importancia
+    relativa de cada componente.
+    """
+    print("[INFO] Calculando varianza por componente (scree plot)...")
+    # Varianza por columna (componente)
+    variances = X.var(axis=0).values
+    n_comp = len(variances)
+    comps = np.arange(1, n_comp + 1)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(comps, variances, marker="o")
+    plt.title("Varianza por componente PCA (Scree-like plot)")
+    plt.xlabel("Componente principal")
+    plt.ylabel("Varianza")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=200)
+    plt.close()
+    print(f"[OK] Scree plot guardado en: {out_png}")
+
+
+def generar_heatmap_centroides(
+    dist_df: pd.DataFrame,
+    out_png: str = "rq1_centroid_distances_heatmap.png",
+):
+    """
+    Genera un heatmap de la matriz de distancias entre centroides de clase.
+    """
+    print("[INFO] Generando heatmap de distancias entre centroides...")
+    plt.figure(figsize=(6, 5))
+    im = plt.imshow(dist_df.values, cmap="viridis")
+
+    plt.xticks(ticks=np.arange(len(dist_df.columns)), labels=dist_df.columns, rotation=45, ha="right")
+    plt.yticks(ticks=np.arange(len(dist_df.index)), labels=dist_df.index)
+
+    plt.colorbar(im, fraction=0.046, pad=0.04, label="Distancia euclídea")
+    plt.title("Heatmap de distancias entre centroides de clase (RQ1)")
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=200)
+    plt.close()
+    print(f"[OK] Heatmap de centroides guardado en: {out_png}")
+
+
 def main():
     # 1) Cargar datos desde PCA
     X, y, df = cargar_datos_supervisado_desde_pca("user_embeddings_PCA.csv")
@@ -165,7 +222,7 @@ def main():
     # 3) Geometría de clases: centroides, intra-clase, distancias
     centroids, intra_dist, dist_df = calcular_geometria_clases(X, y)
 
-    # 4) Guardar resultados en CSV para el informe
+    # 4) Guardar resultados numéricos en CSV para el informe
     print("\n[INFO] Guardando resultados numéricos en CSV...")
     sil_por_clase.to_frame("silhouette_mean").to_csv("rq1_silhouette_por_clase.csv")
     pd.Series(intra_dist, name="intra_mean_distance").to_csv("rq1_intra_clase_dist.csv")
@@ -174,7 +231,13 @@ def main():
     print("[OK] Guardado: rq1_intra_clase_dist.csv")
     print("[OK] Guardado: rq1_centroid_distances.csv")
 
-    # 5) t-SNE 2D para visualización (opcional pero MUY útil para el reporte)
+    # 5) Scree-like plot (varianza por componente PCA)
+    generar_scree_plot(X, out_png="rq1_scree_pca.png")
+
+    # 6) Heatmap de distancias entre centroides
+    generar_heatmap_centroides(dist_df, out_png="rq1_centroid_distances_heatmap.png")
+
+    # 7) t-SNE 2D para visualización (opcional pero MUY útil para el reporte)
     generar_tsne_2d(X, y, out_png="rq1_tsne_pca_labels.png", max_points=5000)
 
     print("\n[FIN] Análisis RQ1 completado.")
