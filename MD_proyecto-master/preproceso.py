@@ -275,35 +275,30 @@ def cargar_datos_supervisado_desde_pca(
     path_pca: str = "user_embeddings_PCA.csv"
 ):
     """
-    Carga el dataset user_embeddings_PCA.csv y lo prepara para un modelo supervisado.
+    Carga user_embeddings_PCA.csv y produce X, y listos para un modelo supervisado.
 
-    Se espera un CSV con columnas:
-        - 'User'     : identificador de usuario (no se usa como feature aquí)
-        - 'frase'    : texto ya preprocesado (útil para análisis, no como feature numérico)
-        - 'Label'    : etiqueta de clase (Supportive, Ideation, Behavior, Attempt, etc.)
-        - 'embedding': lista en texto, por ejemplo "[1.23, -0.45, ...]"
-
-    Devuelve:
-        X : DataFrame con columnas numéricas (una por dimensión del embedding PCA)
-        y : Serie con las etiquetas
-        df: DataFrame original combinado (por si quieres inspeccionarlo)
+    El CSV debe tener:
+        - 'User'
+        - 'frase'
+        - 'Label'
+        - 'embedding' (lista como texto)
     """
     print(f"[INFO] Cargando dataset supervisado desde PCA: {path_pca}")
     df = pd.read_csv(path_pca)
 
-    # Comprobaciones básicas
+    # Verificaciones
     for col in ["User", "frase", "Label", "embedding"]:
         if col not in df.columns:
             raise ValueError(
                 f"Falta la columna '{col}' en {path_pca}. Columnas disponibles: {df.columns.tolist()}"
             )
 
-    # Convertir la columna 'embedding' de string -> lista de floats
+    # Convertir embedding string → lista de floats
     print("[INFO] Parseando columna 'embedding' (string -> lista de floats)...")
     df["embedding"] = df["embedding"].apply(ast.literal_eval)
 
-    # Expandir embedding a columnas numéricas
-    print("[INFO] Expandiendo embeddings a matriz X...")
+    # Expandir embedding en columnas numéricas
+    print("[INFO] Expandiendo embeddings...")
     X = pd.DataFrame(df["embedding"].tolist())
 
     # Target
@@ -313,6 +308,7 @@ def cargar_datos_supervisado_desde_pca(
     print(f"     Clases encontradas: {sorted(y.unique())}")
 
     return X, y, df
+
 
 
 if __name__ == "__main__":
